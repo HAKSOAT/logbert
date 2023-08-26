@@ -67,6 +67,8 @@ options["log_freq"] = None
 options["num_candidates"] = 6
 options["gaussian_mean"] = 0
 options["gaussian_std"] = 1
+options["save_boolean_predictions"] = True
+options["boolean_threshold"] = 0.5
 
 seed_everything(seed=1234)
 

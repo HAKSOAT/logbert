@@ -1,3 +1,4 @@
+import json
 import numpy as np
 import scipy.stats as stats
 import seaborn as sns
@@ -13,17 +14,23 @@ from bert_pytorch.dataset import LogDataset
 from bert_pytorch.dataset.sample import fixed_window
 
 
-def compute_anomaly(results, params, seq_threshold=0.5):
+def compute_anomaly(results, params, seq_threshold=0.5, count_anomaly=True):
     is_logkey = params["is_logkey"]
     is_time = params["is_time"]
-    total_errors = 0
+    anomalies = []
     for seq_res in results:
         # label pairs as anomaly when over half of masked tokens are undetected
         if (is_logkey and seq_res["undetected_tokens"] > seq_res["masked_tokens"] * seq_threshold) or \
                 (is_time and seq_res["num_error"]> seq_res["masked_tokens"] * seq_threshold) or \
                 (params["hypersphere_loss_test"] and seq_res["deepSVDD_label"]):
-            total_errors += 1
-    return total_errors
+            anomalies.append(True)
+        else:
+            anomalies.append(False)
+
+    if count_anomaly:
+        return len([a for a in anomalies if a])
+    else:
+        return anomalies
 
 
 def find_best_threshold(test_normal_results, test_abnormal_results, params, th_range, seq_range):
@@ -79,6 +86,8 @@ class Predictor():
         self.test_ratio = options["test_ratio"]
         self.mask_ratio = options["mask_ratio"]
         self.min_len=options["min_len"]
+        self.save_boolean_predictions = options["save_boolean_predictions"]
+        self.boolean_threshold = options["boolean_threshold"]
 
     def detect_logkey_anomaly(self, masked_output, masked_label):
         num_undetected_tokens = 0
@@ -275,6 +284,18 @@ class Predictor():
 
         params = {"is_logkey": self.is_logkey, "is_time": self.is_time, "hypersphere_loss": self.hypersphere_loss,
                   "hypersphere_loss_test": self.hypersphere_loss_test}
+
+        if self.save_boolean_predictions:
+            normal_predictions = compute_anomaly(test_normal_results, params=params,
+                                                 seq_threshold=self.boolean_threshold, count_anomaly=False)
+            with open(self.model_dir + "normal_results_predictions.json", "w") as f:
+                json.dump(normal_predictions, f)
+
+            abnormal_predictions = compute_anomaly(test_abnormal_results, params=params,
+                                                   seq_threshold=self.boolean_threshold, count_anomaly=False)
+            with open(self.model_dir + "abnormal_results_predictions.json", "w") as f:
+                json.dump(abnormal_predictions, f)
+
         best_th, best_seq_th, FP, TP, TN, FN, P, R, F1 = find_best_threshold(test_normal_results,
                                                                             test_abnormal_results,
                                                                             params=params,
